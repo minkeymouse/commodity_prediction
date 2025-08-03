@@ -8,7 +8,7 @@ between the so‑called *kimchi premium* and index returns.
 
 Example
 -------
->>> from fetch_krx import fetch_index_ohlcv
+>>> from krx.indices import fetch_index_ohlcv
 >>> df = fetch_index_ohlcv("KOSPI", "2023-01-01", "2023-01-10")
 >>> print(df.head())
 
