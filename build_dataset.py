@@ -1,6 +1,3 @@
-#!/usr/bin/env python3
-"""Fetch Bitcoin, foreign exchange and KRX index data and merge into one CSV."""
-
 from __future__ import annotations
 
 import glob
@@ -65,8 +62,7 @@ def fetch_krx(indices: Iterable[str], start: str, end: str) -> List[pd.DataFrame
     return dfs
 
 
-# The following loaders are adapted from ``preprocess.py`` so that this script is
-# self contained.
+# Loaders for existing Bitcoin and FX datasets
 
 def load_aggregated(btc_data_dir: str):
     agg_dfs = []
@@ -143,13 +139,15 @@ def load_fx(currency_data_dir: str):
 def main() -> None:
     btc_data_dir = os.path.join("data", "btc_data")
     currency_data_dir = os.path.join("data", "currency_data")
-    start = "2010-01-01"
+    start = "2017-01-01"
     end = date.today().strftime("%Y-%m-%d")
+    print(f"Fetching KRX indices from {start} to {end}...")
 
     agg_dfs = load_aggregated(btc_data_dir)
     exch_dfs = load_exchange_specific(btc_data_dir)
     fx_dfs = load_fx(currency_data_dir)
     krx_dfs = fetch_krx(DEFAULT_INDICES, start, end)
+    print(f"Fetched {len(krx_dfs)} KRX indices.")
 
     full = pd.concat(agg_dfs + exch_dfs + fx_dfs + krx_dfs, ignore_index=True)
     full["datetime"] = pd.to_datetime(full["datetime"], utc=True).dt.tz_convert(None)
@@ -169,6 +167,7 @@ def main() -> None:
         ]
     ]
     full = full.sort_values("datetime").reset_index(drop=True)
+    print(f"Combined data contains {len(full)} rows.")
 
     os.makedirs("data", exist_ok=True)
     output_path = os.path.join("data", "BTC_KRX.csv")
