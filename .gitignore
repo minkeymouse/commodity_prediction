@@ -1,4 +1,6 @@
-*.csv
+BTC.csv
+BTC_KRX.csv
+
 
 *.pyc
 
