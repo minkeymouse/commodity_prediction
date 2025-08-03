@@ -1,8 +1,71 @@
 #!/usr/bin/env python3
-import os
+"""Fetch Bitcoin, foreign exchange and KRX index data and merge into one CSV."""
+
+from __future__ import annotations
+
 import glob
+import os
+from datetime import date
+from typing import Iterable, List
+
 import pandas as pd
 
+from krx.indices import fetch_index_ohlcv
+
+# Default KRX indices to include in the final dataset
+DEFAULT_INDICES = ["KOSPI", "KOSDAQ", "KOSPI200", "KOSDAQ150"]
+
+
+def _prepare_krx_dataframe(df: pd.DataFrame, index_name: str) -> pd.DataFrame:
+    """Normalise raw ``pykrx`` output to the project's CSV schema."""
+    df = df.rename(
+        columns={
+            "시가": "open",
+            "Open": "open",
+            "고가": "high",
+            "High": "high",
+            "저가": "low",
+            "Low": "low",
+            "종가": "close",
+            "Close": "close",
+            "거래량": "volume",
+            "Volume": "volume",
+        }
+    )
+    df["change_pct"] = df["close"].pct_change() * 100
+    date_col = df.index.name or "index"
+    df = df.reset_index().rename(columns={date_col: "datetime"})
+    df["currency"] = "KRW"
+    df["market"] = "KRX"
+    df["index_name"] = index_name
+    df["platform"] = "KRX"
+    return df[
+        [
+            "datetime",
+            "currency",
+            "market",
+            "index_name",
+            "platform",
+            "open",
+            "high",
+            "low",
+            "close",
+            "volume",
+            "change_pct",
+        ]
+    ]
+
+
+def fetch_krx(indices: Iterable[str], start: str, end: str) -> List[pd.DataFrame]:
+    """Fetch OHLCV data for ``indices`` between ``start`` and ``end``."""
+    dfs: List[pd.DataFrame] = []
+    for idx in indices:
+        df = fetch_index_ohlcv(idx, start, end)
+        dfs.append(_prepare_krx_dataframe(df, idx))
+    return dfs
+
+
+# Loaders for existing Bitcoin and FX datasets
 
 def load_aggregated(btc_data_dir: str):
     agg_dfs = []
@@ -13,11 +76,9 @@ def load_aggregated(btc_data_dir: str):
             .replace(".csv", "")
         )
         df = pd.read_csv(path, parse_dates=["Time"])
-        df = df.melt(
-            id_vars=["Time"],
-            var_name="market",
-            value_name="close",
-        ).rename(columns={"Time": "datetime"})
+        df = df.melt(id_vars=["Time"], var_name="market", value_name="close").rename(
+            columns={"Time": "datetime"}
+        )
         df["platform"] = "bitcoinity"
         for col in ["open", "high", "low", "volume", "change_pct"]:
             df[col] = pd.NA
@@ -25,7 +86,6 @@ def load_aggregated(btc_data_dir: str):
         df["index_name"] = pd.NA
         agg_dfs.append(df)
     return agg_dfs
-
 
 def load_exchange_specific(btc_data_dir: str):
     exch_dfs = []
@@ -54,7 +114,6 @@ def load_exchange_specific(btc_data_dir: str):
         exch_dfs.append(df)
     return exch_dfs
 
-
 def load_fx(currency_data_dir: str):
     fx_dfs = []
     for path in glob.glob(os.path.join(currency_data_dir, "USD_* 과거 데이터.csv")):
@@ -80,33 +139,19 @@ def load_fx(currency_data_dir: str):
     return fx_dfs
 
 
-def load_krx(krx_data_dir: str):
-    """Load pre-fetched KRX index data."""
-
-    krx_dfs = []
-    for path in glob.glob(os.path.join(krx_data_dir, "*.csv")):
-        df = pd.read_csv(path, parse_dates=["datetime"])
-        krx_dfs.append(df)
-    return krx_dfs
-
-
-def main():
+def main() -> None:
     btc_data_dir = os.path.join("data", "btc_data")
     currency_data_dir = os.path.join("data", "currency_data")
-    krx_data_dir = os.path.join("data", "krx_data")
+    start = "2010-01-01"
+    end = date.today().strftime("%Y-%m-%d")
 
     agg_dfs = load_aggregated(btc_data_dir)
     exch_dfs = load_exchange_specific(btc_data_dir)
     fx_dfs = load_fx(currency_data_dir)
-    krx_dfs = load_krx(krx_data_dir)
+    krx_dfs = fetch_krx(DEFAULT_INDICES, start, end)
 
     full = pd.concat(agg_dfs + exch_dfs + fx_dfs + krx_dfs, ignore_index=True)
-
-    full["datetime"] = (
-        pd.to_datetime(full["datetime"], utc=True)
-        .dt.tz_convert(None)
-    )
-
+    full["datetime"] = pd.to_datetime(full["datetime"], utc=True).dt.tz_convert(None)
     full = full[
         [
             "datetime",
@@ -122,7 +167,6 @@ def main():
             "change_pct",
         ]
     ]
-
     full = full.sort_values("datetime").reset_index(drop=True)
 
     os.makedirs("data", exist_ok=True)
@@ -133,4 +177,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
