@@ -31,13 +31,21 @@ DEFAULT_INDICES = ["KOSPI", "KOSDAQ", "KOSPI200", "KOSDAQ150"]
 def _prepare_dataframe(df: pd.DataFrame, index_name: str) -> pd.DataFrame:
     """Normalise raw ``pykrx`` output to the project's CSV schema."""
 
+    # ``pykrx`` may return either Korean or English column names depending on
+    # the version installed.  Make the renaming resilient to both by mapping any
+    # known variants to our canonical schema.
     df = df.rename(
         columns={
             "시가": "open",
+            "Open": "open",
             "고가": "high",
+            "High": "high",
             "저가": "low",
+            "Low": "low",
             "종가": "close",
+            "Close": "close",
             "거래량": "volume",
+            "Volume": "volume",
         }
     )
 
@@ -45,7 +53,10 @@ def _prepare_dataframe(df: pd.DataFrame, index_name: str) -> pd.DataFrame:
     # compute it from the closing prices.
     df["change_pct"] = df["close"].pct_change() * 100
 
-    df = df.reset_index().rename(columns={"index": "datetime"})
+    # The index column name varies (e.g. "날짜" in some locales); capture it
+    # before resetting so we can rename it consistently.
+    date_col = df.index.name or "index"
+    df = df.reset_index().rename(columns={date_col: "datetime"})
     df["currency"] = "KRW"
     df["market"] = "KRX"
     df["index_name"] = index_name
