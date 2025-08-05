@@ -170,7 +170,7 @@ def main() -> None:
     print(f"Combined data contains {len(full)} rows.")
 
     os.makedirs("data", exist_ok=True)
-    output_path = os.path.join("data", "BTC_KRX.csv")
+    output_path = os.path.join("data", "datafile.csv")
     full.to_csv(output_path, index=False)
     print(f"✔ Saved combined data ({len(full)} rows) to {output_path}")
 
